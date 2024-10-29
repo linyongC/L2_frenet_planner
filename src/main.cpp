@@ -204,7 +204,7 @@ Car InitEgoCar(const json& scene_j, const vector<Lane>& lanes) {
 
 void InitLanes(const json& scene_j, vector<Lane>* lanes) {
   utils::WayPoints ref_wp;
-  InitWaypoints(scene_j, &ref_wp);
+  InitWaypoints(scene_j, &ref_wp); // 获取scene_j中的waypoints并存入ref_wp
 
   const double lane_width = scene_j["lane_width"];
   const int num_lanes_left = scene_j["num_lanes_left"];
@@ -214,7 +214,7 @@ void InitLanes(const json& scene_j, vector<Lane>* lanes) {
   for (int i = -num_lanes_left; i <= num_lanes_right; ++i) {
     utils::WayPoints lane_wp;
     if (i == 0) {
-      lane_wp = ref_wp;
+      lane_wp = ref_wp; // 当前ego车道
     } else {
       utils::ShiftWaypoints(ref_wp, -i * lane_width,
                             &lane_wp);  // positive shift to the left
@@ -341,18 +341,20 @@ Pose EstimateChangeOfPoseV2(const Car& next_planning_state_local,
 // }
 
 int main(int argc, char** argv) {
+  // 调用gflags库来解析命令行参数。
+  // 这里true的参数表示在解析后将命令行参数从argv中移除，使得后续代码不会看到这些已经处理的参数。
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  if (!InitFrenetHyperParameters()) {
+  if (!InitFrenetHyperParameters()) { // FLAGS_hyper_path来自命令行参数，初始化FrenetHyperParameters
     return 1;
   }
   json scene_j;
-  if (!LoadJsonFile(FLAGS_scene_path, &scene_j)) {
+  if (!LoadJsonFile(FLAGS_scene_path, &scene_j)) { // FLAGS_scene_path来自命令行参数的scene_path
     cout << "Fail to load simulation scene: " << FLAGS_scene_path << endl;
     return 1;
   }
 
-  vector<Lane> lanes;
+  vector<Lane> lanes; // 定义类型是Lane类的vector，未初始化
   InitLanes(scene_j, &lanes);
 
   Car ego_car = InitEgoCar(scene_j, lanes);

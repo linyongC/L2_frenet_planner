@@ -26,6 +26,7 @@ struct Pose {
   double y;    // [m]
   double yaw;  // [rad]
 
+  // 重载了加法减法运算符 +/-，使得两个 Pose 对象可以直接相加减。
   Pose operator+(const Pose& p) const {
     return Pose{x + p.x, y + p.y, yaw + p.yaw};
   }
@@ -47,12 +48,16 @@ struct Twist {
   double vy;
   double yaw_rate;
 
+  // 重载了输出流运算符 <<，使得可以直接使用 std::cout 或其他输出流对象来打印 Twist 对象的内容。输出格式为：
+  // Twist(vx值, vy值, yaw_rate的度数值).
   friend std::ostream& operator<<(std::ostream& os, const Twist& t) {
     os << " Twist(" << t.vx << ", " << t.vy << "," << utils::rad2deg(t.yaw_rate)
        << "). ";
     return os;
   }
 
+  // 高效的二进制序列化
+  // Twist 对象就可以方便地被转换为二进制格式进行存储或传输，并且可以轻松地从二进制格式恢复
   MSGPACK_DEFINE(vx, vy, yaw_rate);
 };
 struct Accel {

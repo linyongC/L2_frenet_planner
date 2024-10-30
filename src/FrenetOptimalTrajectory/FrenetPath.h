@@ -32,7 +32,7 @@ class FrenetPath {
   vector<double> s_dd;   // s acceleration
   vector<double> s_ddd;  // s jerk
 
-  // Euclidean attributes
+  // Euclidean attributes   local or global？？？
   vector<double> x;    // x position
   vector<double> y;    // y position
   vector<double> yaw;  // yaw in rad

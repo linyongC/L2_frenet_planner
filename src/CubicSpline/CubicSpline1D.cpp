@@ -12,15 +12,15 @@ CubicSpline1D::CubicSpline1D() = default;
 
 // Construct the 1-dimensional cubic spline.
 CubicSpline1D::CubicSpline1D(const vector<double> &v1, const vector<double> &v2)
-    : nx(v1.size()), a(v2), x(v1), y(v2) {
+    : nx(v1.size()), a(v2), x(v1), y(v2) { // 在构造函数中直接初始化成员变量
   // compute elementwise difference
   vector<double> deltas(nx);
   adjacent_difference(x.begin(), x.end(), deltas.begin());
   deltas.erase(deltas.begin());
 
   // compute matrix a, vector b
-  MatrixXd ma = MatrixXd::Zero(nx, nx);
-  VectorXd vb = VectorXd::Zero(nx);
+  MatrixXd ma = MatrixXd::Zero(nx, nx); // 动态矩阵
+  VectorXd vb = VectorXd::Zero(nx); // 动态向量
   matrix_a(deltas, ma);
   vector_b(deltas, vb);
 

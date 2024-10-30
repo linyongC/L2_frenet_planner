@@ -13,7 +13,7 @@ using namespace utils;
 
 class Lane {
  public:
-  Lane() = default;
+  Lane() = default; // 包含了多个构造函数，允许以不同的方式初始化一个Lane实例，根据参数区分
   Lane(int lane_id, const WayPoints& wp, double lane_width = 4.0,
        Lane* left_lane = nullptr, Lane* right_lane = nullptr)
       : wp_(wp),
@@ -36,7 +36,7 @@ class Lane {
     CalculateDenseLaneBoundaries();
   }
 
-  // copy constructor
+  // copy constructor 拷贝构造函数用于创建一个新对象，并将其初始化为现有对象的副本。
   Lane(const Lane& other)
       : wp_(other.wp_),
         left_boundary_(other.left_boundary_),

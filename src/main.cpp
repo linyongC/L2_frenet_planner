@@ -56,7 +56,7 @@ void UpdateFrenetCoordinates(const Car& car, const utils::WayPoints& wp,
   fot_ic->yaw_c = car.getPose().yaw;
 
   Car car_f;
-  utils::ToFrenet(car, wp, &car_f);
+  utils::ToFrenet(car, wp, &car_f);  // 将car_c投影到local_wp上面获取car_f信息
   fot_ic->s = car_f.getPose().x;
   fot_ic->s_d = car_f.getTwist().vx;
   fot_ic->s_dd = car_f.getAccel().ax;
@@ -184,14 +184,14 @@ Car InitEgoCar(const json& scene_j, const vector<Lane>& lanes) {
   int lane_id = -1;
   for (std::size_t i = 0; i < lanes.size(); ++i) {
     if (point_in_lane(lanes[i], ego_car_pose.x, ego_car_pose.y)) {
-      lane_id = i;
+      lane_id = i; // 判断ego所在车道
       break;
     }
   }
   ego_car.setCurLaneId(lane_id);
   ego_car.setTargetLaneId(lane_id);
 
-  // align ego heading w.r.t lane heading
+  // align ego heading w.r.t lane heading 将车辆heading设置为lane heading
   if (lane_id != -1) {
     const auto& wp = lanes[lane_id].GetWayPoints();
     double lane_heading =
@@ -216,11 +216,11 @@ void InitLanes(const json& scene_j, vector<Lane>* lanes) {
     if (i == 0) {
       lane_wp = ref_wp; // 当前ego车道
     } else {
-      utils::ShiftWaypoints(ref_wp, -i * lane_width,
+      utils::ShiftWaypoints(ref_wp, -i * lane_width, // 先使用三次样条插值，在沿yaw垂直方向shift，得到lane_wp
                             &lane_wp);  // positive shift to the left
     }
-    int lane_id = i + num_lanes_left;
-    Lane lane(lane_id, lane_wp, lane_width);
+    int lane_id = i + num_lanes_left; // 从左往右依次为0，1，2，3，，，
+    Lane lane(lane_id, lane_wp, lane_width); // 实例化lane并添加到vector中
     lanes->push_back(lane);
   }
 
@@ -230,15 +230,15 @@ void InitLanes(const json& scene_j, vector<Lane>* lanes) {
       (*lanes)[i].SetLeftLane(&(*lanes)[i - 1]);
     }
     if (i < lanes->size() - 1) {
-      (*lanes)[i].SetLeftLane(&(*lanes)[i + 1]);
+      (*lanes)[i].SetRightLane(&(*lanes)[i + 1]); // 此处应该是SetRightLane
     }
   }
 
   // calculate lane boundaries
   utils::WayPoints left_lane_bound;
   utils::WayPoints right_lane_bound;
-  for (int i = -num_lanes_left; i <= num_lanes_right; ++i) {
-    if (i == -num_lanes_left) {
+  for (int i = -num_lanes_left; i <= num_lanes_right; ++i) { // 计算每条lane的边界
+    if (i == -num_lanes_left) { 
       utils::ShiftWaypoints(ref_wp, (-i + 0.5) * lane_width, &left_lane_bound);
     }
     utils::ShiftWaypoints(ref_wp, (-i - 0.5) * lane_width, &right_lane_bound);
@@ -355,42 +355,42 @@ int main(int argc, char** argv) {
   }
 
   vector<Lane> lanes; // 定义类型是Lane类的vector，未初始化
-  InitLanes(scene_j, &lanes);
+  InitLanes(scene_j, &lanes); // 初始化车道：三次样条插值、平移或取多个车道中心线、计算车道边界等
 
-  Car ego_car = InitEgoCar(scene_j, lanes);
+  Car ego_car = InitEgoCar(scene_j, lanes); // 初始化ego
 
-  vector<Obstacle> obstacles;
-  InitObstacles(scene_j, lanes, &obstacles);
+  vector<Obstacle> obstacles;car
+  InitObstacles(scene_j, lanes, &obstacles); // 初始化bostacles，转化为cartesian坐标
 
   double target_speed = scene_j["target_speed"];
 
   const auto& fot_hp = FrenetHyperparameters::getConstInstance();
-  const double TimeStep = fot_hp.dt;
+  const double TimeStep = fot_hp.dt; // 0.1s
   int sim_loop = 200;
   double total_runtime = 0.0;  // [ms]
   double timestamp = 0.0;      // [s], simulation timestamp
   int i = 0;
-  std::vector<DataFrame> data_frames;
+  std::vector<DataFrame> data_frames; // 使用msgpack::pack可将data_frames序列化存储
   bool reach_goal = false;
   std::vector<FrenetPath>
       best_frenet_paths_local;  // store the best frenet path for each lane
   std::vector<std::vector<FrenetPath>> frenet_paths_local_all;
 
-  Car planning_init_point_local = ego_car;
+  Car planning_init_point_local = ego_car; // init规划起点为当前位置
   if (FLAGS_local_planning) {
-    planning_init_point_local.setPose({0, 0, 0});
+    planning_init_point_local.setPose({0, 0, 0}); // 使能local_planning时将当前位置置为0
   }
 
   double yaw_rate_meas = 0.0;
   double speed_meas = 0.0;
   Pose pose_change_est = {0.0, 0.0, 0.0};
-  Car planning_init_point_wrt_last_frame;
+  Car planning_init_point_wrt_last_frame; // 基于last frame的规划起点
 
-  unordered_map<int, WayPoints> wp_lanes_local;
+  unordered_map<int, WayPoints> wp_lanes_local; // 哈希表（无序映射），它的键是int类型，值是WayPoints类型
   std::vector<Obstacle> obstacles_local;
 
   for (; i < sim_loop; ++i) {
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now(); //获取当前时间点的时间戳
 
     // Loop each lane here and may initialize fot_ic for each lane
     best_frenet_paths_local.clear();
@@ -413,10 +413,10 @@ int main(int argc, char** argv) {
         if (!ob.getLaneIds().empty()) {
           ob_laneid = *(ob.getLaneIds().begin());
         }
-        utils::ToFrenet(ob, lanes[ob_laneid].GetWayPoints(), ob_f);
-        ob_f->predictPoses(timestamp, fot_hp.maxt, TimeStep);
+        utils::ToFrenet(ob, lanes[ob_laneid].GetWayPoints(), ob_f); // 障碍物信息转换到frenet坐标系
+        ob_f->predictPoses(timestamp, fot_hp.maxt, TimeStep); // 预测轨迹，匀速直线运动
         std::unique_ptr<Obstacle> ob_c = nullptr;
-        utils::ToCartesian(*ob_f, lanes[ob_laneid].GetWayPoints(), ob_c);
+        utils::ToCartesian(*ob_f, lanes[ob_laneid].GetWayPoints(), ob_c); // 障碍物信息转换到cartesian坐标系
         ob = std::move(*ob_c);
       }
 
@@ -424,25 +424,25 @@ int main(int argc, char** argv) {
       obstacles_local.clear();
       WayPoints wp_local;
       if (FLAGS_local_planning) {
-        ToLocal(obstacles, ego_car.getPose(), &obstacles_local);
-        ToLocal(wp, ego_car.getPose(), &wp_local);
+        ToLocal(obstacles, ego_car.getPose(), &obstacles_local);// 障碍物转换到车辆坐标系下
+        ToLocal(wp, ego_car.getPose(), &wp_local);// wp转换到车辆坐标系下
       } else {
         obstacles_local = obstacles;
         wp_local = wp;
       }
       wp_lanes_local[lane.GetLaneId()] = wp_local;
 
-      // run frenet optimal trajectory
+      // run frenet optimal trajectory 简称fot
       FrenetInitialConditions fot_ic(wp_local, obstacles_local,
                                      lane.GetLaneId());
       fot_ic.target_speed = target_speed;
       fot_ic.lane_width = lane.GetLaneWidth();
 
       // update Frenet coordinate of ego car
-      UpdateFrenetCoordinates(planning_init_point_local, wp_local, &fot_ic);
+      UpdateFrenetCoordinates(planning_init_point_local, wp_local, &fot_ic); // 获取fot_ic的s/d等信息，将car_c投影到local_wp上面获取car_f信息
 
-      // local planning w.r.t. ego car
-      FrenetOptimalTrajectory fot = FrenetOptimalTrajectory(fot_ic, fot_hp);
+      // local planning w.r.t. ego car，fot_ic是初始化的fot，涵盖投影点的frenet信息
+      FrenetOptimalTrajectory fot = FrenetOptimalTrajectory(fot_ic, fot_hp); // 横纵向轨迹规划，求代价
       FrenetPath* best_frenet_path_per_lane = fot.getBestPath();
       if (!best_frenet_path_per_lane || best_frenet_path_per_lane->x.empty()) {
         cerr << "Fail to find a feasible path at timestamp: " << timestamp
@@ -450,7 +450,7 @@ int main(int argc, char** argv) {
       } else {
         // update cost for each frenet path based on lane
         best_frenet_path_per_lane->lane_id = lane.GetLaneId();
-        best_frenet_path_per_lane->c_lane_change =
+        best_frenet_path_per_lane->c_lane_change =            // 对当前lane的最有轨迹增加变道代价，变道时非目标lane的轨迹的代价增加
             std::abs(best_frenet_path_per_lane->lane_id -
                      planning_init_point_local.getTargetLaneId());
         best_frenet_path_per_lane->cf +=
@@ -460,23 +460,24 @@ int main(int argc, char** argv) {
       }
 
       // store frenet paths at each d for each lane
-      map<double, FrenetPath*> d_to_best_path_local;
+      map<double, FrenetPath*> d_to_best_path_local; // 键是double类型的值，而值是指向FrenetPath对象的指针
       for (auto fp : fot.getFrenetPaths()) {
-        double d = round_to_tenth(fp->d.back());
-        if (d_to_best_path_local.count(d) == 0) {
+        double d = round_to_tenth(fp->d.back()); // 终端的d保留一位小数
+        if (d_to_best_path_local.count(d) == 0) { // 没有和终端d对应的映射
           d_to_best_path_local[d] = fp;
         } else {
-          if (fp->cf < d_to_best_path_local[d]->cf) {
+          if (fp->cf < d_to_best_path_local[d]->cf) { // 如果有，找到最小代价的轨迹，存到终端d处
             d_to_best_path_local[d] = fp;
           }
         }
       }
 
       for (const auto& d_fp : d_to_best_path_local) {
-        d_fp.second->lane_id = lane.GetLaneId();
+        d_fp.second->lane_id = lane.GetLaneId(); // 存储当前车道每一个终点d对应的最有路径
         frenet_paths_local_all[lane.GetLaneId()].push_back(*(d_fp.second));
       }
     }
+
     if (reach_goal) {
       break;
     }
@@ -505,7 +506,7 @@ int main(int argc, char** argv) {
     // convert (x,y,yaw) of paths to global for debug purposes
     std::vector<FrenetPath> best_frenet_paths_global = best_frenet_paths_local;
     if (FLAGS_local_planning) {
-      for (auto& fp : best_frenet_paths_global) {
+      for (auto& fp : best_frenet_paths_global) {   // 将最优路径转换到global坐标系下
         std::size_t fp_size = fp.x.size();
         for (std::size_t i = 0; i < fp_size; ++i) {
           Pose pose_l({fp.x[i], fp.y[i], fp.yaw[i]});
@@ -562,7 +563,7 @@ int main(int argc, char** argv) {
 
     // update next planning state w.r.t. local frame
     Car next_planning_state_local = planning_init_point_local;
-    UpdateNextPlanningStateLocal(
+    UpdateNextPlanningStateLocal( // 根据最优轨迹更新下一个时刻ego的状态（在当前时刻ego的local坐标系下）
         best_frenet_path_local, wp_lanes_local[best_frenet_path_local->lane_id],
         &next_planning_state_local);
 

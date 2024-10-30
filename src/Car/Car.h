@@ -50,7 +50,7 @@ class Car {
   int getTargetLaneId() { return target_lane_id; }
 
   //  private:  // sheng: set public to use msgpack
-  Pose pose;    // pose w.r.t global frame
+  Pose pose;    // pose w.r.t global frame w.r.t表示with respect to
   Twist twist;  // velocity w.r.t vehicle frame
   Accel accel;  // acceleration w. = .t vehicle frame
   double length;

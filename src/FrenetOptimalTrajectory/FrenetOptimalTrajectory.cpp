@@ -21,7 +21,7 @@ FrenetOptimalTrajectory::FrenetOptimalTrajectory(
     : fot_ic(fot_ic_), fot_hp(fot_hp_) {
   auto start = chrono::high_resolution_clock::now();
   // parse the waypoints and obstacles
-  mu = new mutex();
+  mu = new mutex(); // new一个互斥量指针，避免线程资源竞争
 
   // make sure best_frenet_path is initialized
   best_frenet_path = nullptr;
@@ -31,7 +31,7 @@ FrenetOptimalTrajectory::FrenetOptimalTrajectory(
     return;
   }
 
-  // construct spline path
+  // construct spline path 基于local的wp进行三次样条插值
   csp = new CubicSpline2D(fot_ic.wp[0], fot_ic.wp[1]);
 
   // calculate the trajectories
@@ -39,7 +39,7 @@ FrenetOptimalTrajectory::FrenetOptimalTrajectory(
     // calculate how to split computation across threads
 
     int total_di_iter = static_cast<int>(fot_ic.lane_width / fot_hp.d_road_w) +
-                        1;  // account for the last index
+                        1;  // account for the last index，total_di_iter=9
 
     calc_frenet_paths(0, total_di_iter, false);
 
@@ -126,29 +126,31 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
   // double valid_path_time = 0;
 
   // initialize di, with start_di_index
+  // lane_width = 4, d_road_w = 0.5, 即横向采样间隔是0.5m
   const double VEHICLE_WIDTH = 1.86;
   double half_d_width = (fot_ic.lane_width - VEHICLE_WIDTH) / 2.0;
   double di = -half_d_width + start_di_index * fot_hp.d_road_w;
+  // di是横向轨迹规划的终点，范围是 -half_d_width到 half_d_width（ego边界不能过线），间隔0.5m
 
   // generate path to each offset goal
   // note di goes up to but not including end_di_index*fot_hp.d_road_w
   while ((di < -half_d_width + end_di_index * fot_hp.d_road_w) &&
          (di <= half_d_width)) {
-    ti = fot_hp.mint;
+    ti = fot_hp.mint; // 2
     // lateral motion planning
-    while (ti <= fot_hp.maxt) {
+    while (ti <= fot_hp.maxt) { // 5
       lateral_deviation = 0;
       lateral_velocity = 0;
       lateral_acceleration = 0;
       lateral_jerk = 0;
 
-      fp = new FrenetPath();
+      fp = new FrenetPath(); // 在d到di之间使用5次多项式拟合，得到d和t之间的关系
       QuinticPolynomial lat_qp = QuinticPolynomial(
           fot_ic.d, fot_ic.d_d, fot_ic.d_dd, di, 0.0, 0.0, ti);
 
       // construct frenet path
       double t = 0;
-      while (t <= kHorizon) {
+      while (t <= kHorizon) { // kHorizon = 5.0; 计算5s的轨迹（l和t的关系）
         fp->t.push_back(t);
         if (t <= ti) {
           fp->d.push_back(lat_qp.calc_point(t));
@@ -160,7 +162,7 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
           lateral_acceleration += abs(lat_qp.calc_second_derivative(t));
           lateral_jerk += abs(lat_qp.calc_third_derivative(t));
         } else {
-          fp->d.push_back(di);  // end point
+          fp->d.push_back(di);  // end point 终点di后认为是直线
           fp->d_d.push_back(0.0);
           fp->d_dd.push_back(0.0);
           fp->d_ddd.push_back(0.0);
@@ -172,8 +174,9 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
       }
 
       // Lonitudinal motion planning: velocity keeping mode
-      tv = fot_ic.target_speed -
+      tv = fot_ic.target_speed -     // 20 - 0.5*2
            fot_hp.v_sample_step * fot_hp.n_s_sample;  // tv: sampling speed
+      // tv是纵向轨迹规划的终点，范围是 20 - 0.5*2到 20 + 0.5*2，间隔0.5
       while (tv <=
              fot_ic.target_speed + fot_hp.v_sample_step * fot_hp.n_s_sample) {
         longitudinal_acceleration = 0;
@@ -187,7 +190,7 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
         tfp->d_d.assign(fp->d_d.begin(), fp->d_d.end());
         tfp->d_dd.assign(fp->d_dd.begin(), fp->d_dd.end());
         tfp->d_ddd.assign(fp->d_ddd.begin(), fp->d_ddd.end());
-        QuarticPolynomial lon_qp = QuarticPolynomial(
+        QuarticPolynomial lon_qp = QuarticPolynomial( // 巡航状态，无终点s值，所以用四次多项式拟合，得到s和t的关系
             fot_ic.s, fot_ic.s_d, fot_ic.s_dd, tv, 0.0,
             ti);  // 1. ic and ec lon_acc all zeros? 2. sampling time is same
                   // for both lat and lon?
@@ -213,7 +216,7 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
 
         num_paths++;
         // delete if failure or invalid path
-        bool success = tfp->to_global_path(csp);
+        bool success = tfp->to_global_path(csp); // 将s/l转化为local坐标系下？？？
         num_viable_paths++;
         if (!success) {
           // deallocate memory and continue
@@ -223,7 +226,7 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
         }
 
         // auto start = chrono::high_resolution_clock::now();
-        bool valid_path = tfp->is_valid_path(fot_ic.obstacles_c);
+        bool valid_path = tfp->is_valid_path(fot_ic.obstacles_c); //check纵向指标是否满足
         // auto end = chrono::high_resolution_clock::now();
         // valid_path_time +=
         // chrono::duration_cast<chrono::nanoseconds>(end -
@@ -260,7 +263,7 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
                               fot_hp.k_ef * tfp->c_efficiency;
 
         // obstacle costs
-        tfp->c_inv_dist_to_obstacles =
+        tfp->c_inv_dist_to_obstacles =  // calculate the Sum of 1 / distance_to_obstacle
             tfp->inverse_distance_to_obstacles(fot_ic.obstacles_c);
 
         // final cost
@@ -278,10 +281,10 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
           frenet_paths.push_back(tfp);
         }
 
-        tv += fot_hp.v_sample_step;
+        tv += fot_hp.v_sample_step; // 0.5
       }
 
-      ti += fot_hp.t_sample_step;
+      ti += fot_hp.t_sample_step; // 0.5
       // make sure to deallocate
       delete fp;
     }

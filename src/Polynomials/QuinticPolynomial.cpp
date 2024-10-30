@@ -6,7 +6,7 @@
 using namespace Eigen;
 
 QuinticPolynomial::QuinticPolynomial(double xs, double vxs, double axs,
-        double xe, double vxe, double axe, double t):
+        double xe, double vxe, double axe, double t): // 给定初始条件和终止条件下计算五次多项式系数
         a0(xs), a1(vxs) {
     a2 = axs / 2.0;
     Matrix3d A;

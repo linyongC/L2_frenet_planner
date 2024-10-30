@@ -69,14 +69,14 @@ void ToCartesian(const Pose& pose_f, const Twist& twist_f, const Accel& accel_f,
   double kappa_nr = csp->calc_curvature(s_f);
   double dx_over_ds_nr = csp->calc_dx_over_ds(s_f);
   double dy_over_ds_nr = csp->calc_dy_over_ds(s_f);
-  std::tuple<double, double> unit_vec_vx_nr(
+  std::tuple<double, double> unit_vec_vx_nr( // unit_vec_vx_nr和unit_vec_vy_nr相互垂直
       dx_over_ds_nr / norm(dx_over_ds_nr, dy_over_ds_nr),
       dy_over_ds_nr / norm(dx_over_ds_nr, dy_over_ds_nr));
   std::tuple<double, double> unit_vec_vy_nr(-get<1>(unit_vec_vx_nr),
                                             get<0>(unit_vec_vx_nr));
 
   double x_c = x_nr + d_f * get<0>(unit_vec_vy_nr);
-  double y_c = y_nr + d_f * get<1>(unit_vec_vy_nr);
+  double y_c = y_nr + d_f * get<1>(unit_vec_vy_nr); // frenet转cartesian
   double yaw_c = yaw_f + yaw_nr;
   *pose_c = {x_c, y_c, yaw_c};  // Pose in Cartesian frame
 
@@ -261,13 +261,13 @@ void ShiftWaypoints(const WayPoints& ref_wp, double offset, WayPoints* wp) {
   const int wp_size = ref_wp[0].size();
   CubicSpline2D csp = CubicSpline2D(ref_wp[0], ref_wp[1]);
   for (int i = 0; i < wp_size; ++i) {
-    double s = csp.find_s(ref_wp[0][i], ref_wp[1][i]);
+    double s = csp.find_s(ref_wp[0][i], ref_wp[1][i]); // 计算s，然后计算x,y,yaw
 
     double x = csp.calc_x(s);
     double y = csp.calc_y(s);
     double yaw = csp.calc_yaw(s);
 
-    double x_shift = x - offset * sin(yaw);
+    double x_shift = x - offset * sin(yaw); // 沿着yaw垂直方向shift
     double y_shift = y + offset * cos(yaw);
     (*wp)[0].push_back(x_shift);
     (*wp)[1].push_back(y_shift);

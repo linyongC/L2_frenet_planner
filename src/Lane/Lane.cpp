@@ -76,7 +76,7 @@ void Lane::CalculateDenseLaneBoundaries() {
   CalculateDenseLaneBoundaries(right_boundary_, &right_boundary_dense_);
 }
 
-void Lane::CalculateDenseLaneBoundaries(const WayPoints& boundary,
+void Lane::CalculateDenseLaneBoundaries(const WayPoints& boundary, //增密LaneBoundaries
                                         WayPoints* dense_boundary) {
   CubicSpline2D spline(boundary[0], boundary[1]);
   double s_lo = spline.s_lo();

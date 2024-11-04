@@ -294,7 +294,7 @@ Pose EstimateChangeOfPoseV2(const Car& next_planning_state_local,
       fot_hp.sensor_yaw_rate_offset, fot_hp.sensor_yaw_rate_noise_std);
 
   constexpr double kSimuStep = 0.002;  // [s]
-  const int kNumSteps = static_cast<int>(fot_hp.dt / kSimuStep);
+  const int kNumSteps = static_cast<int>(fot_hp.dt / kSimuStep); // 0.1/0.002 = 50
   for (int i = 0; i < kNumSteps; ++i) {
     delta_x_noise += speed_noise * std::cos(delta_yaw_noise) * kSimuStep;
     delta_y_noise +=
@@ -359,8 +359,8 @@ int main(int argc, char** argv) {
 
   Car ego_car = InitEgoCar(scene_j, lanes); // 初始化ego
 
-  vector<Obstacle> obstacles;car
-  InitObstacles(scene_j, lanes, &obstacles); // 初始化bostacles，转化为cartesian坐标
+  vector<Obstacle> obstacles;
+  InitObstacles(scene_j, lanes, &obstacles); // 初始化bostacles，增加laneid，转化为cartesian坐标
 
   double target_speed = scene_j["target_speed"];
 
@@ -407,14 +407,14 @@ int main(int argc, char** argv) {
       }
 
       // prediction on obstacles
-      for (auto& ob : obstacles) {
+      for (auto& ob : obstacles) { // 通过auto&声明的ob是对vector中元素的引用，更改会影响原obstacles
         std::unique_ptr<Obstacle> ob_f = nullptr;
         int ob_laneid = 0;
         if (!ob.getLaneIds().empty()) {
           ob_laneid = *(ob.getLaneIds().begin());
         }
-        utils::ToFrenet(ob, lanes[ob_laneid].GetWayPoints(), ob_f); // 障碍物信息转换到frenet坐标系
-        ob_f->predictPoses(timestamp, fot_hp.maxt, TimeStep); // 预测轨迹，匀速直线运动
+        utils::ToFrenet(ob, lanes[ob_laneid].GetWayPoints(), ob_f); // 障碍物信息转换到障碍物所在lane的frenet坐标系
+        ob_f->predictPoses(timestamp, fot_hp.maxt, TimeStep); // 预测轨迹（5s），匀速直线运动
         std::unique_ptr<Obstacle> ob_c = nullptr;
         utils::ToCartesian(*ob_f, lanes[ob_laneid].GetWayPoints(), ob_c); // 障碍物信息转换到cartesian坐标系
         ob = std::move(*ob_c);
@@ -506,7 +506,7 @@ int main(int argc, char** argv) {
     // convert (x,y,yaw) of paths to global for debug purposes
     std::vector<FrenetPath> best_frenet_paths_global = best_frenet_paths_local;
     if (FLAGS_local_planning) {
-      for (auto& fp : best_frenet_paths_global) {   // 将最优路径转换到global坐标系下
+      for (auto& fp : best_frenet_paths_global) {   // 将最优路径转换到global坐标系下，用于debug
         std::size_t fp_size = fp.x.size();
         for (std::size_t i = 0; i < fp_size; ++i) {
           Pose pose_l({fp.x[i], fp.y[i], fp.yaw[i]});
@@ -556,7 +556,7 @@ int main(int argc, char** argv) {
     // update
     timestamp += TimeStep;
     // update obstacle to next state
-    for (Obstacle& ob : obstacles) {
+    for (Obstacle& ob : obstacles) { // 更新obstacles的状态为下一帧
       Pose ob_pose_next = ob.getPredictPoseAtTimestamp(timestamp);
       ob.setPose(ob_pose_next);
     }
@@ -580,7 +580,7 @@ int main(int argc, char** argv) {
     // std::cout << "ego_car: " << ego_car.getPose() << ego_car.getTwist()
     //           << std::endl;
 
-    if (FLAGS_local_planning) {
+    if (FLAGS_local_planning) { // 将下一个时刻ego的状态转换到global坐标系下，只针对pose，twist和accel还是针对当前车辆坐标系
       ToGlobal(next_planning_state_local, ego_car.getPose(), &next_ego_car);
     }
 
@@ -595,18 +595,18 @@ int main(int argc, char** argv) {
     // pose_change_est = EstimateChangeOfPose(
     //     speed_meas, yaw_rate_meas);  // estimation of state change
 
-    ego_car = next_ego_car;
+    ego_car = next_ego_car;   //更新ego_car的信息为下一个step，pose/twist/accel
 
-    // TEMP FIX: use add-on noise for now.
-    pose_change_est = EstimateChangeOfPoseV2(next_planning_state_local,
+    // TEMP FIX: use add-on noise for now. // 得到local坐标系下的姿态偏移量！！！！！
+    pose_change_est = EstimateChangeOfPoseV2(next_planning_state_local, // 待理解详细的估计过程 24.11.04
                                              &speed_meas, &yaw_rate_meas);
 
     planning_init_point_wrt_last_frame = next_planning_state_local;
     // TODO: update Initial Planning Point in local frame
     planning_init_point_local = planning_init_point_wrt_last_frame;
     if (FLAGS_local_planning) {
-      planning_init_point_local.setPose(
-          planning_init_point_wrt_last_frame.getPose() - pose_change_est);
+      planning_init_point_local.setPose( // 下一个周期的规划起点：下一周期车辆在本周期local的位置 - 姿态偏移量
+          planning_init_point_wrt_last_frame.getPose() - pose_change_est); // 这个差值就是noise，对应实际的误差
     }
 
     auto end = std::chrono::high_resolution_clock::now();

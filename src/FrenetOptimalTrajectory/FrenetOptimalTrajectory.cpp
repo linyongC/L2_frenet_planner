@@ -215,8 +215,8 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
         }
 
         num_paths++;
-        // delete if failure or invalid path
-        bool success = tfp->to_global_path(csp); // 将s/l转化为local坐标系下？？？
+        // delete if failure or invalid path  csp是基于local的wp进行三次样条插值
+        bool success = tfp->to_global_path(csp); // 将s/l转化为local坐标系下
         num_viable_paths++;
         if (!success) {
           // deallocate memory and continue
@@ -368,7 +368,7 @@ void FrenetOptimalTrajectory::calc_frenet_paths(int start_di_index,
         //                                                s_flw, 0.0,
         //                                                ti_flw);
         // } else {
-        lon_qp_flw = std::make_unique<QuinticPolynomial>(
+        lon_qp_flw = std::make_unique<QuinticPolynomial>(   // V=0？？？ follow情况呢？
             fot_ic.s, fot_ic.s_d, fot_ic.s_dd, s_flw, 0.0, 0.0, ti_flw);
         // }
         for (double tp : tfp->t) {
@@ -493,7 +493,7 @@ bool FrenetOptimalTrajectory::has_near_obstacle_front(
       continue;  // behind ego car, skip
     }
 
-    constexpr double kTimeGap = 20.0;
+    constexpr double kTimeGap = 20.0; // 20s时距内的目标才考虑，找到最近的目标
     double dist_threshold =
         kTimeGap * max({ob_f->getTwist().vx, fot_ic.s_d, 1.0});
     if (ob_f->getPose().x - fot_ic.s < dist_threshold) {
@@ -506,14 +506,14 @@ bool FrenetOptimalTrajectory::has_near_obstacle_front(
   }
   const auto &ob_c = fot_ic.obstacles_c[idx_front_obstacle];
 
-  double time_gap_target = 3.0;  // 3-second driving rule
+  double time_gap_target = 3.0;  // 3-second driving rule 目标时距
   double time_gap_lo = 2.0;
   double time_gap_hi = 4.0;
-  double v_front_capped = max(ob_c.getTwist().vx, 3.0);
-  *target_s_flw = min_s_front_obstacle - time_gap_target * v_front_capped;
+  double v_front_capped = max(ob_c.getTwist().vx, 3.0); // 速度不能低于3m/s
+  *target_s_flw = min_s_front_obstacle - time_gap_target * v_front_capped; // 目标s
 
   double t = time_gap_lo;
-  constexpr double kTimeGapStep = 0.5;
+  constexpr double kTimeGapStep = 0.5; // 间隔0.5s时距采样，获取目标s
   while (t <= time_gap_hi) {
     double s_flw = min_s_front_obstacle - t * v_front_capped;
     if (s_flw > fot_ic.s) {
